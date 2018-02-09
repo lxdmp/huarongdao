@@ -4,6 +4,9 @@ from abc import ABCMeta, abstractmethod
 import collections
 import os
 import copy
+import random
+import curses   
+import sys
 
 # 状态
 class State(object):
@@ -241,7 +244,7 @@ class SingleStrategy(object):
 							new_front_reached.add(new_stat)
 			obj.front_reached = new_front_reached
 		if len(self.front_reached)<=0 and len(self.twin.front_reached)<=0:
-			raise Exception('no solution for this problem')
+			raise Exception('no solution for this problem!')
 		return None
 		
 	def run(self):
@@ -281,6 +284,8 @@ class SingleStrategy(object):
 		
 class Strategy(object):
 	def __init__(self, start, end):
+		if not Strategy.existMoves(start, end):
+			raise Exception('No solution for this problem!!')
 		self.forward = SingleStrategy(start)
 		self.backward = SingleStrategy(end)
 		self.forward.setTwin(self.backward)
@@ -289,7 +294,34 @@ class Strategy(object):
 	def run(self):
 		return self.forward.run()
 
-import random
+	
+	# 逆序的和(除0外各数字前比其大的个数的和)
+	@staticmethod
+	def inv(stat):
+		data = stat.data
+		sum = 0
+		for i in range(len(data)):
+			base = data[i]
+			if base==0:
+				continue
+			for j in range(i):
+				iter = data[j]
+				if iter>base:
+					sum += 1
+		return sum
+
+	@staticmethod
+	def existMoves(start, end):
+		assert(start.size==end.size)
+		size = start.size
+		if size%2==1:
+			return Strategy.inv(start)%2==Strategy.inv(end)%2
+		else:
+			start_0_row_idx = start.data.index(0)/start.size
+			end_0_row_idx = end.data.index(0)/end.size
+			row_diff = abs(start_0_row_idx-end_0_row_idx)
+			return (Strategy.inv(start)%2==Strategy.inv(end)%2)==(row_diff%2==0)
+
 def randomState(size=3):
 	assert(size>1)
 	limit = size*size
@@ -305,7 +337,6 @@ def randomState(size=3):
 	stat.setData(buf)
 	return stat
 
-import curses   
 class Terminal(object):
 
 	def __init__(self):
@@ -334,7 +365,7 @@ if __name__=='__main__':
 	final_stat = randomState(size)
 	'''
 	init_stat = State(size)
-	init_stat.setData([1,7,14,12,2,6,13,11,8,4,5,10,9,3,15,0])
+	init_stat.setData([14,12,10,4,2,6,7,5,9,1,13,11,3,15,8,0])
 	final_stat = State(size)
 	final_stat.setData([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,0])
 
@@ -345,32 +376,31 @@ if __name__=='__main__':
 	'''
 
 	terminal = Terminal()
-	terminal.draw(5, 2, str(init_stat))
-	terminal.draw(15, 3, '->')
-	terminal.draw(20, 2, str(final_stat))
+	terminal.draw(size, size/2, str(init_stat))
+	terminal.draw(size*5, size*2/3, '->')
+	terminal.draw(size*7, size/2, str(final_stat))
 
-	s = Strategy(init_stat, final_stat)
 	try:
+		s = Strategy(init_stat, final_stat)
 		stats, moves = s.run()
 	except Exception as e:
-		indicator_x = 5
-		indicator_y = 7
-		terminal.draw(indicator_x, indicator_y-1, str(e))
+		indicator_x = size
+		indicator_y = size*2+1
+		terminal.draw(indicator_x, indicator_y-2, str(e))
 		terminal.getchar()
 		terminal.end()
-		import sys
 		sys.exit(-1)
 	assert(len(stats)-1==len(moves))
 	
-	indicator_x = 5
-	indicator_y = 7
+	indicator_x = size
+	indicator_y = size*2+1
 	s = 'Press key to start animation'
-	terminal.draw(indicator_x, indicator_y-1, s)
+	terminal.draw(indicator_x, indicator_y-2, s)
 	terminal.getchar()
 	s = '%d moves : '%(len(moves))
 	terminal.draw(indicator_x, indicator_y, s)
-	animation_x = 13
-	animation_y = 8
+	animation_x = size
+	animation_y = indicator_y+1
 	for i in range(len(moves)):
 		stat = stats[i]
 		move = moves[i]
