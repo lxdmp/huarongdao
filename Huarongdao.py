@@ -200,8 +200,44 @@ class MoveDown(Move):
 		ret.stat_from = self.stat_to
 		return ret
 
-# 策略
-class SingleStrategy(object):
+# 策略	
+class Strategy(object):
+	def __init__(self, start, end):
+		pass
+
+	@abstractmethod
+	def run(self):
+		pass
+
+	# 逆序的和(除0外各数字前比其大的个数的和)
+	@staticmethod
+	def inv(stat):
+		data = stat.data
+		sum = 0
+		for i in range(len(data)):
+			base = data[i]
+			if base==0:
+				continue
+			for j in range(i):
+				iter = data[j]
+				if iter>base:
+					sum += 1
+		return sum
+
+	@staticmethod
+	def existMoves(start, end):
+		assert(start.size==end.size)
+		size = start.size
+		if size%2==1:
+			return Strategy.inv(start)%2==Strategy.inv(end)%2
+		else:
+			start_0_row_idx = start.data.index(0)/start.size
+			end_0_row_idx = end.data.index(0)/end.size
+			row_diff = abs(start_0_row_idx-end_0_row_idx)
+			return (Strategy.inv(start)%2==Strategy.inv(end)%2)==(row_diff%2==0)
+
+# 双向搜索方法
+class SingleSearchingStrategy(object):
 
 	def __init__(self, start):
 		self.start = start # 起点
@@ -281,47 +317,20 @@ class SingleStrategy(object):
 			stats.append(node)
 		
 		return (stats,moves)
-		
-class Strategy(object):
+
+class DualSearchingStrategy(object):
 	def __init__(self, start, end):
 		if not Strategy.existMoves(start, end):
 			raise Exception('No solution for this problem!!')
-		self.forward = SingleStrategy(start)
-		self.backward = SingleStrategy(end)
+		self.forward = SingleSearchingStrategy(start)
+		self.backward = SingleSearchingStrategy(end)
 		self.forward.setTwin(self.backward)
 		self.backward.setTwin(self.forward)
 
 	def run(self):
 		return self.forward.run()
 
-	
-	# 逆序的和(除0外各数字前比其大的个数的和)
-	@staticmethod
-	def inv(stat):
-		data = stat.data
-		sum = 0
-		for i in range(len(data)):
-			base = data[i]
-			if base==0:
-				continue
-			for j in range(i):
-				iter = data[j]
-				if iter>base:
-					sum += 1
-		return sum
-
-	@staticmethod
-	def existMoves(start, end):
-		assert(start.size==end.size)
-		size = start.size
-		if size%2==1:
-			return Strategy.inv(start)%2==Strategy.inv(end)%2
-		else:
-			start_0_row_idx = start.data.index(0)/start.size
-			end_0_row_idx = end.data.index(0)/end.size
-			row_diff = abs(start_0_row_idx-end_0_row_idx)
-			return (Strategy.inv(start)%2==Strategy.inv(end)%2)==(row_diff%2==0)
-
+# 生成随机状态
 def randomState(size=3):
 	assert(size>1)
 	limit = size*size
@@ -337,6 +346,7 @@ def randomState(size=3):
 	stat.setData(buf)
 	return stat
 
+# 显示终端
 class Terminal(object):
 
 	def __init__(self):
@@ -360,10 +370,12 @@ class Terminal(object):
 
 if __name__=='__main__':
 	size = 4
+
 	'''
 	init_stat = randomState(size)
 	final_stat = randomState(size)
 	'''
+
 	init_stat = State(size)
 	init_stat.setData([14,12,10,4,2,6,7,5,9,1,13,11,3,15,8,0])
 	final_stat = State(size)
@@ -381,7 +393,8 @@ if __name__=='__main__':
 	terminal.draw(size*7, size/2, str(final_stat))
 
 	try:
-		s = Strategy(init_stat, final_stat)
+		strategy = DualSearchingStrategy
+		s = strategy(init_stat, final_stat)
 		stats, moves = s.run()
 	except Exception as e:
 		indicator_x = size
