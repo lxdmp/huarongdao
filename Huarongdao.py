@@ -15,6 +15,7 @@ class State(object):
 		self.data = []
 		self.parent = None
 		self.move_from_parent = None
+		self.d = -1
 
 	def __eq__(self, other):
 		return self.feature().__eq__(other.feature())
@@ -43,6 +44,40 @@ class State(object):
 
 	def data(self):
 		return self.data
+
+	@staticmethod
+	def distance(this, other):
+		'''
+		评估两个状态间的距离 : 除0外各数字索引差值的和.
+		'''
+		assert(this.size==other.size)
+		this_data = this.data
+		other_data = other.data
+		limit = this.size*this.size-1
+		distance = 0
+		for i in range(limit):
+			d = i+1
+			idx_in_this = this_data.index(d)
+			idx_in_other = other_data.index(d)
+			distance += abs(idx_in_this-idx_in_other)
+		return distance
+
+	def calc_depth(self):
+		if self.parent!=None:
+			return self.parent.calc_depth()+1
+		else:
+			return 0
+	
+	def depth(self):
+		if self.d<0:
+			self.d = self.calc_depth()
+		return self.d
+
+	def evaluate(self, target):
+		'''
+		评估某状态
+		'''
+		return self.depth()+State.distance(self, target)
 
 # 左移/右移/上移/下移
 class Move(object):
@@ -239,14 +274,18 @@ class Strategy(object):
 # 双向搜索方法
 class SingleSearchingStrategy(object):
 
-	def __init__(self, start):
+	def __init__(self, start, end):
 		self.start = start # 起点
+		self.end = end # 终点
 
-		self.reached = {} # 已到达过的点
-		self.reached[self.start.feature()] = self.start
+		self.reached = {} # 已到达过的状态(若多个相同状态,只记录代价最小的)
+		self.addStateReached(self.start)
 
-		self.front_reached = set() # 最新到达的点
+		self.front_reached = set() # 最新到达的状态
 		self.front_reached.add(self.start)
+
+	def addStateReached(self, new_reached):
+		self.reached[new_reached.feature()] = new_reached
 
 	def setTwin(self, twin):
 		self.twin = twin
@@ -259,26 +298,63 @@ class SingleSearchingStrategy(object):
 				return (self_stat, twin_stat)
 		return None
 
+	@staticmethod
+	def forwardBlind(obj):
+		'''
+		穷举方式(往所有方向)前进一步
+		'''
+		new_front_reached = set()
+		for stat in obj.front_reached:
+			moves = [MoveLeft(), MoveRight(), MoveUp(), MoveDown()]
+			for move in moves:
+				new_stat = move.move(stat)
+				if new_stat!=None: # 移动合理
+					if not obj.reached.has_key(new_stat.feature()): # 找到了新状态
+						obj.addStateReached(new_stat)
+						new_front_reached.add(new_stat)
+		obj.front_reached = new_front_reached
+
+	@staticmethod
+	def forwardLocalOptimal(obj):
+		'''
+		只往最优方向前进一步
+		'''
+		stat = sorted(obj.front_reached, cmp=lambda x,y:cmp(x.evaluate(obj.end), y.evaluate(obj.end)))[0] # 最优方向(评估代价最小的)
+		obj.front_reached.remove(stat)
+
+		new_added_front_reached = set()
+		moves = [MoveLeft(), MoveRight(), MoveUp(), MoveDown()]
+		for move in moves:
+			new_stat = move.move(stat)
+			if new_stat!=None: # 移动合理
+				if not obj.reached.has_key(new_stat.feature()): # 找到了新状态
+					obj.addStateReached(new_stat)
+					new_added_front_reached.add(new_stat)
+				else: # 找到了旧状态,但潜在路径更短(不一定理论上最优)
+					old_stat = obj.reached[new_stat.feature()]
+					if old_stat.evaluate(obj.end)>new_stat.evaluate(obj.end):
+						obj.addStateReached(new_stat)
+						new_added_front_reached.add(new_stat)
+		
+		for item in new_added_front_reached:
+			if item in obj.front_reached:
+				obj.front_reached.remove(item)
+			obj.front_reached.add(item)
+
 	def run_once(self):
 		objs = [self, self.twin]
 		for obj in objs:
+			#- 查看是否已相遇
 			meet_stat = obj.meetTwin()
 			if meet_stat!=None:
 				from_self = True
 				if obj!=self:
 					from_self = False
 				return obj.formatRecord(meet_stat, from_self)
+			#- 再往前找一步
+#			SingleSearchingStrategy.forwardBlind(obj)
+			SingleSearchingStrategy.forwardLocalOptimal(obj)
 
-			new_front_reached = set()
-			for stat in obj.front_reached:
-				moves = [MoveLeft(), MoveRight(), MoveUp(), MoveDown()]
-				for move in moves:
-					new_stat = move.move(stat)
-					if new_stat!=None: # 移动合理
-						if not obj.reached.has_key(new_stat.feature()): # 找到了新状态
-							obj.reached[new_stat.feature()] = new_stat
-							new_front_reached.add(new_stat)
-			obj.front_reached = new_front_reached
 		if len(self.front_reached)<=0 and len(self.twin.front_reached)<=0:
 			raise Exception('no solution for this problem!')
 		return None
@@ -322,8 +398,8 @@ class DualSearchingStrategy(object):
 	def __init__(self, start, end):
 		if not Strategy.existMoves(start, end):
 			raise Exception('No solution for this problem!!')
-		self.forward = SingleSearchingStrategy(start)
-		self.backward = SingleSearchingStrategy(end)
+		self.forward = SingleSearchingStrategy(start, end)
+		self.backward = SingleSearchingStrategy(end, start)
 		self.forward.setTwin(self.backward)
 		self.backward.setTwin(self.forward)
 
@@ -371,15 +447,15 @@ class Terminal(object):
 if __name__=='__main__':
 	size = 4
 
-	'''
 	init_stat = randomState(size)
 	final_stat = randomState(size)
-	'''
 
+	'''
 	init_stat = State(size)
 	init_stat.setData([14,12,10,4,2,6,7,5,9,1,13,11,3,15,8,0])
 	final_stat = State(size)
 	final_stat.setData([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,0])
+	'''
 
 	'''
 	print str(init_stat)
